@@ -14,11 +14,12 @@ S_STEP = 1
 
 
 # input title ratings
-challenger_rating = 1400
-rival_rating = 1700
-duelist_rating = 2000
-gladiator_rating = 2600
-rank_1_rating = 2800
+your_team_rating = 2004
+challenger_rating = 1422
+rival_rating = 1857
+duelist_rating = 2205
+gladiator_rating = 2804
+rank_1_rating = 3024
 ratings_cdf_dict = {
     challenger_rating:CHALLENGER_CDF,
     rival_rating:RIVAL_CDF,
@@ -57,6 +58,19 @@ def logistic_dist_param_solve(ratings_cdf_dict,challenger_rating):
     return(mu_sol,s_sol,error_sol)
 
 # solve
+print("Solving for parameters of logistic distribution of arena ratings")
+print()
+print("Input Ratings:")
+print("\tYour Team Rating: {}".format(your_team_rating))
+print("\tChallenger: {}".format(challenger_rating))
+print("\tRival: {}".format(rival_rating))
+print("\tDuelist: {}".format(duelist_rating))
+print("\tGladiator: {}".format(gladiator_rating))
+print("\tRank 1: {}".format(rank_1_rating))
+print()
 mu,s,error = logistic_dist_param_solve(ratings_cdf_dict,challenger_rating)
-
-print("mu: {:0.0f}, s: {:0.0f}, error: {:0.5f}".format(mu,s,error))
+print("Outputs:")
+print("\tmu: {:0.0f}".format(mu))
+print("\ts: {:0.0f}".format(s))
+print("\terror: {:0.5f}".format(error))
+print("\tYour Team Percentile: {:0.1f}th".format(100*logistic_distribution_cdf(your_team_rating,mu,s)))
