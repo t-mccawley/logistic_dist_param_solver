@@ -1,40 +1,62 @@
 import math
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from collections import OrderedDict
 
 # constants
 CHALLENGER_CDF = 0.65
 RIVAL_CDF = 0.9
 DUELIST_CDF = 0.97
 GLADIATOR_CDF = 0.995
-RANK_1_CDF = 0.999
+RANK_ONE_CDF = 0.999
 MU_STEP = 1
 S_MIN = 1
 S_MAX = 1000
 S_STEP = 1
+BRACKETS = ['2v2','3v3','5v5']
+RATING_PLOT_MIN = 0
+RATING_PLOT_MAX = 3000
+BRACKET_COLOR_MAP = {
+    '2v2':'b',
+    '3v3':'y',
+    '5v5':'r',
+}
 
+# parse inputs.csv
+inputs = pd.read_csv('../inputs/inputs.csv')
+inputs = inputs.set_index('bracket')
 
-# input title ratings
-your_team_rating = 2004
-challenger_rating = 1422
-rival_rating = 1857
-duelist_rating = 2205
-gladiator_rating = 2804
-rank_1_rating = 3024
-ratings_cdf_dict = {
-    challenger_rating:CHALLENGER_CDF,
-    rival_rating:RIVAL_CDF,
-    duelist_rating:DUELIST_CDF,
-    gladiator_rating:GLADIATOR_CDF,
-    rank_1_rating:RANK_1_CDF,
+# construct dicts
+ratings_cdf_dict = {}
+for bracket in BRACKETS:
+    ratings_cdf_dict[bracket] = {
+    inputs.loc[bracket,'challenger']:CHALLENGER_CDF,
+    inputs.loc[bracket,'rival']:RIVAL_CDF,
+    inputs.loc[bracket,'duelist']:DUELIST_CDF,
+    inputs.loc[bracket,'gladiator']:GLADIATOR_CDF,
+    inputs.loc[bracket,'rank_one']:RANK_ONE_CDF,
     }
+ratings_title_dict = {}
+for bracket in BRACKETS:
+    ratings_title_dict[bracket] = OrderedDict()
+    ratings_title_dict[bracket][inputs.loc[bracket,'rank_one']] = 'Rank One'
+    ratings_title_dict[bracket][inputs.loc[bracket,'gladiator']] = 'Gladiator'
+    ratings_title_dict[bracket][inputs.loc[bracket,'duelist']] = 'Duelist'
+    ratings_title_dict[bracket][inputs.loc[bracket,'rival']] = 'Rival'
+    ratings_title_dict[bracket][inputs.loc[bracket,'challenger']] = 'Challenger'
 
-def logistic_distribution_cdf(x,mu,s):
+def logistic_distribution_cdf_fast(x,mu,s):
     """CDF of logistic distrbution"""
     return( 1 / (1 + math.exp( (mu - x) / s ) ) )
 
+def logistic_distribution_cdf(x,mu,s):
+    """CDF of logistic distrbution"""
+    return( 1 / (1 + np.exp( (mu - x) / s ) ) )
+
 def logistic_distribution_cdf_abs_error(x,mu,s,p):
     """Error of CDF given p"""
-    return(abs(p - logistic_distribution_cdf(x,mu,s)))
+    return(abs(p - logistic_distribution_cdf_fast(x,mu,s)))
 
 def arena_rating_cdf_error(mu,s,ratings_cdf_dict):
     """Given CDF parameters and arena title ratings, compute the absolute error"""
@@ -57,20 +79,55 @@ def logistic_dist_param_solve(ratings_cdf_dict,challenger_rating):
                 s_sol = s
     return(mu_sol,s_sol,error_sol)
 
+def determine_title(player_rating,ratings_title_dict,bracket):
+    for rating in ratings_title_dict[bracket]:
+        if player_rating >= rating:
+            return(ratings_title_dict[bracket][rating])
+    return('None')
+
 # solve
+outputs = pd.DataFrame(index=BRACKETS,columns=['mu','s','error','player_percentile'])
 print("Solving for parameters of logistic distribution of arena ratings")
 print()
-print("Input Ratings:")
-print("\tYour Team Rating: {}".format(your_team_rating))
-print("\tChallenger: {}".format(challenger_rating))
-print("\tRival: {}".format(rival_rating))
-print("\tDuelist: {}".format(duelist_rating))
-print("\tGladiator: {}".format(gladiator_rating))
-print("\tRank 1: {}".format(rank_1_rating))
-print()
-mu,s,error = logistic_dist_param_solve(ratings_cdf_dict,challenger_rating)
-print("Outputs:")
-print("\tmu: {:0.0f}".format(mu))
-print("\ts: {:0.0f}".format(s))
-print("\terror: {:0.5f}".format(error))
-print("\tYour Team Percentile: {:0.1f}th".format(100*logistic_distribution_cdf(your_team_rating,mu,s)))
+for bracket in BRACKETS:
+    print('Bracket: {}'.format(bracket))
+    print("Inputs:")
+    print(inputs.loc[bracket,:])
+    print()
+    mu,s,error = logistic_dist_param_solve(ratings_cdf_dict[bracket],inputs.loc[bracket,'challenger'])
+    player_percentile = 100*logistic_distribution_cdf_fast(inputs.loc[bracket,'player_rating'],mu,s)
+    outputs.loc[bracket,'mu'] = mu
+    outputs.loc[bracket,'s'] = s
+    outputs.loc[bracket,'error'] = error
+    outputs.loc[bracket,'player_percentile'] = player_percentile
+    print("Outputs:")
+    print(outputs.loc[bracket,:])
+    print()
+
+
+# visualize
+rating_plot = np.arange(RATING_PLOT_MIN,RATING_PLOT_MAX,1)
+
+plt.figure(figsize=(14,7))
+
+for bracket in BRACKETS:
+    cdf_plot = 100*logistic_distribution_cdf(rating_plot,outputs.loc[bracket,'mu'],outputs.loc[bracket,'s'])
+    bracket_color = BRACKET_COLOR_MAP[bracket]
+    plt.plot(rating_plot,cdf_plot,label=bracket,color=bracket_color)
+    player_rating = inputs.loc[bracket,'player_rating']
+    player_percentile = outputs.loc[bracket,'player_percentile']
+    player_title = determine_title(player_rating,ratings_title_dict,bracket)
+    player_str = 'Rating = {}, Percentile = {:0.2f}, Title = {}'.format(player_rating,player_percentile,player_title)
+    plt.plot(player_rating,player_percentile,label=player_str,marker='o',color=bracket_color)
+    # plot title cutoffs 
+    # TODO
+
+plt.legend()
+plt.title('WoW Arena Rating CDFs')
+plt.xlabel('Rating')
+plt.ylabel('Percentile')
+plt.xticks(np.arange(RATING_PLOT_MIN, RATING_PLOT_MAX+1, step=100))
+plt.xticks(rotation = 45)
+plt.yticks(np.arange(0, 101, step=5))
+plt.grid()
+plt.show()
